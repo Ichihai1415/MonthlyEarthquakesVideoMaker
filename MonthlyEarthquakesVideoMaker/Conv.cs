@@ -1,6 +1,5 @@
 ﻿using System.Drawing;
 using System.Runtime.Versioning;
-using System.Text.Json.Serialization;
 
 namespace MonthlyEarthquakesVideoMaker
 {

@@ -1,3 +1,8 @@
 <Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="DEBUG_NOTE" />
+    <BuildType Name="Release" />
+  </Configurations>
   <Project Path="MonthlyEarthquakesVideoMaker/MonthlyEarthquakesVideoMaker.csproj" />
 </Solution>

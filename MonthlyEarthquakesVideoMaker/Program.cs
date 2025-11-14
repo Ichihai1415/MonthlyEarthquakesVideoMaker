@@ -6,7 +6,6 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.Versioning;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using static MonthlyEarthquakesVideoMaker.Conv;
@@ -21,6 +20,11 @@ internal class Program
     internal static int WAIT = 10;
     [SupportedOSPlatform("windows")]
     public static FontFamily font = new("Koruri");
+    public static StringFormat string_Right = new()
+    {
+        Alignment = StringAlignment.Far,
+        LineAlignment = StringAlignment.Far
+    };
 
     private static void Main(string[] args)
     {
@@ -28,6 +32,15 @@ internal class Program
 
         var now = DateTime.Now;
         var get = now.AddMonths(-1);
+
+# if DEBUG_NOTE
+        config = new()
+        {
+            SaveDir_EqData = @"C:\Ichihai1415\tmp\eqdata",
+            SaveDir_Video = @"C:\Ichihai1415\tmp\eqdata"
+        };
+#endif
+
 
         var ym = get.ToString("yyyyMM");
 
@@ -37,24 +50,18 @@ internal class Program
         var res = Console.ReadLine();
         if (res == "y" || res == "Y")
         {
+            Console.WriteLine("取得中...");
             for (var dt = new DateTime(get.Year, get.Month, 1); dt < new DateTime(now.Year, now.Month, 1); dt = dt.AddDays(1))
             {
+                Console.WriteLine(dt.ToString("yyyy/MM/dd"));
                 GetDB1d(dt);
                 GetHypo(dt);
                 Thread.Sleep(WAIT);
             }
-
-
-
-
-
-
-
-
-
-
+            Console.WriteLine("描画中...");
+            ReadyVideo(get);
         }
-
+        Console.WriteLine("終了しました。");
     }
 
 
@@ -171,11 +178,8 @@ internal class Program
     {
         try
         {
-            Console.ForegroundColor = ConsoleColor.Cyan;
-            var path = Console.ReadLine() ?? "";
-
             var files = Directory.EnumerateFiles(config.SaveDir_EqData + "\\EQDB\\" + dt.ToString("yyyy\\\\MM\\\\dd") + ".csv").Concat(Directory.EnumerateFiles(config.SaveDir_EqData + "\\HypoList\\" + dt.ToString("yyyy\\\\MM\\\\dd") + ".csv"));
-            var datas_ = path == "\\" ? MergeFiles([.. files]).Replace("\r", "").Split('\n') : File.ReadAllLines(path.Replace("\"", ""));//gitで触ると\r付く
+            var datas_ = MergeFiles([.. files]).Replace("\r", "").Split('\n');//gitで触ると\r付く
             var datas = (IEnumerable<Data>)datas_.Where(x => x.Contains('°')).Where(x => !x.Contains("不明データ")).Select(Text2Data).OrderBy(a => a.Time);//データじゃないやつついでに緯度経度ないやつも除外
 
             var drawConfig = new DrawConfig()
@@ -193,7 +197,7 @@ internal class Program
                 TextInt = 1,
                 EnableLegend = true
             };
-            var saveDir = $"output\\videoimage\\{DateTime.Now:yyyyMMddHHmmss}";
+            var saveDir = "output\\" + DateTime.Now.ToString("yyyyMMddHHmmss");
             var dataSum = datas.Count();
             Directory.CreateDirectory(saveDir);
             var zoomW = drawConfig.MapSize / (drawConfig.LonEnd - drawConfig.LonSta);
@@ -262,31 +266,21 @@ internal class Program
 
                 g.DrawImage(bitmap_legend, 0, 0);
                 var xBase = drawConfig.MapSize;
-                //imageとの違い
                 g.DrawString(drawTime.ToString("yyyy/MM/dd HH:mm:ss"), new Font(font, drawConfig.MapSize / 30f, GraphicsUnit.Pixel), new SolidBrush(color.Text), xBase + drawConfig.MapSize / 9f * 4, drawConfig.MapSize * 23 / 24f);
 
-
-                var savePath = $"{saveDir}\\{i:d5}.png";
+                var savePath = saveDir + "\\" + i.ToString("d5") + ".png";
                 bitmap.Save(savePath, ImageFormat.Png);
-                ConWrite($"{drawTime:yyyy/MM/dd HH:mm:ss}  {i:d5}.png : {datas_Draw.Count()}  (内部残り: {datas.Count()} / {dataSum})", ConsoleColor.Green);
+                Console.WriteLine(drawTime.ToString("yyyy/MM/dd HH:mm:ss") + "  " + i.ToString("d5") + ".png : " + datas_Draw.Count() + "  (内部残り: " + datas.Count() + " / " + dataSum + ")");
                 drawTime += drawConfig.DrawSpan;
                 if (i % 10 == 0)
                     GC.Collect();
             }
-            ConWrite($"画像出力完了\n動画化(30fps)(画像ファイルがあるフォルダで): ffmpeg -framerate 30 -i %05d.png -vcodec libx264 -pix_fmt yuv420p -r 30 _output.mp4");
-            if (int.TryParse((string)UserInput("ffmpegで動画を作成する場合、fps(フレームレート)を入力してください。ffmpeg.exeのパスが通っている必要があります。\n数値への変換に失敗したら終了します。数字以外を何か入力してください。例:30", typeof(string), "30"), out int f))
-            {
-                using var pro = Process.Start("ffmpeg", $"-framerate {f} -i \"{saveDir}\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r {f} \"{saveDir}\\_output_{f}.mp4\"");
-                pro.WaitForExit();
-            }
+            using var pro = Process.Start("ffmpeg", "-framerate 30 -i \"" + saveDir + "\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r 30 \"" + config.SaveDir_Video + "\\" + dt.ToString("yyyyMM") + ".mp4\"");
+            pro.WaitForExit();
         }
         catch (Exception ex)
         {
-#if DEBUG
-            ConWrite("エラーが発生しました。" + ex + "\n再度実行してください。", ConsoleColor.Red);
-#else
-                ConWrite("エラーが発生しました。" + ex.Message + " 再度実行してください。", ConsoleColor.Red);
-#endif
+            Console.WriteLine("エラーが発生しました。" + ex + "\n再度実行してください。");
         }
     }
 
@@ -298,17 +292,16 @@ internal class Program
     {
         if (files.Length == 0)
         {
-            ConWrite("結合するファイルのパスを1行ごとに入力してください。空文字が入力されたら結合を開始します。フォルダのパスを入力するとすべて読み込みます。※観測震度検索をしているものとしていないものの結合はできますが他ソフトで処理をする際エラーとなる可能性があります。このソフトでは問題ありません。");
+            Console.WriteLine("結合するファイルのパスを1行ごとに入力してください。空文字が入力されたら結合を開始します。フォルダのパスを入力するとすべて読み込みます。※観測震度検索をしているものとしていないものの結合はできますが他ソフトで処理をする際エラーとなる可能性があります。このソフトでは問題ありません。");
             List<string> filesTmp = [];
             while (true)
             {
-                Console.ForegroundColor = ConsoleColor.Cyan;
                 var file = Console.ReadLine();
                 if (!string.IsNullOrEmpty(file))
                     filesTmp.Add(file.Replace("\"", ""));
                 else if (filesTmp.Count == 0)
                 {
-                    ConWrite("中止します。");
+                    Console.WriteLine("中止します。");
                     return "";
                 }
                 else
@@ -326,8 +319,8 @@ internal class Program
                 files2.Add(f);
             else
             {
-                ConWrite("ファイル名取得中... ", false);
-                ConWrite(f, ConsoleColor.Green);
+                Console.WriteLine("ファイル名取得中... ", false);
+                Console.WriteLine(f);
                 var openPaths = Directory.EnumerateFiles(f, "*.csv", SearchOption.AllDirectories);
                 foreach (var path in openPaths)
                     files2.Add(path);
@@ -337,12 +330,12 @@ internal class Program
         {
             if (File.Exists(file))
             {
-                ConWrite("読み込み中... ", false);
-                ConWrite(file, ConsoleColor.Green);
+                Console.WriteLine("読み込み中... ", false);
+                Console.WriteLine(file);
                 stringBuilder.Append(File.ReadAllText(file).Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度,検索対象最大震度\n", "").Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n", ""));
             }
             else
-                ConWrite($"{file}が見つかりません。", ConsoleColor.Red);
+                Console.WriteLine($"{file}が見つかりません。");
         }
         stringBuilder.Insert(0, "地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
         return stringBuilder.ToString();
