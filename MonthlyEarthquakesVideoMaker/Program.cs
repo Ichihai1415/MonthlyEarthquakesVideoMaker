@@ -1,5 +1,7 @@
 ﻿using AngleSharp.Html.Parser;
+using Ichihai1415.GeoJSON;
 using MonthlyEarthquakesVideoMaker;
+using MonthlyEarthquakesVideoMaker.Properties;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -516,6 +518,35 @@ internal class Program
         //g.DrawString("地図データ:気象庁, Natural Earth", new Font(font, config.MapSize / 28, GraphicsUnit.Pixel), new SolidBrush(color.Text), config.MapSize - mdsize.Width, config.MapSize - mdsize.Height);
         g.Dispose();
         return mapImg;
+    }
+
+    public static Bitmap DrawMap(DrawConfig config, Config_Color color)
+    {
+        var mapData_jp = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_JMA_Map>(Resources.Map_jp);
+        var bitmap = new Bitmap(1920, 1080);
+        using var g = Graphics.FromImage(bitmap);
+        g.Clear(Color.FromArgb(20, 40, 60));
+
+
+        using var gp_j = new GraphicsPath();
+
+        foreach (var feature in mapData_jp.Features)
+        {
+            if (feature.Geometry == null)
+                continue;
+            foreach (var singleObject in feature.Geometry.Coordinates.Objects)
+            {
+                gp_j.StartFigure();
+                var points = singleObject.MainPoints.Select(coordinate => new PointF((coordinate.Lon - config.LonSta) * (float)config.Zoom, (config.LatEnd - coordinate.Lat) * (float)config.Zoom));
+                if (points.Count() > 2)
+                    gp_j.AddPolygon(points.ToArray());
+            }
+            //}
+        }
+        var lineWidth = Math.Max(1f, (float)config.Zoom / 216f);
+
+        g.FillPath(new SolidBrush(Color.FromArgb(100, 100, 150)), gp_j);
+        g.DrawPath(new Pen(color.LineColor, lineWidth) { LineJoin = LineJoin.Round }, gp_j);//zoom > 200 ? 2 : 1
     }
 
 
