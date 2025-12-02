@@ -20,7 +20,7 @@ internal class Program
     internal static Config_Color color = new();
     internal static int WAIT = 10;
     [SupportedOSPlatform("windows")]
-    public static FontFamily font = new("Koruri");
+    public static FontFamily font = new("Koruri Regular");
     public static StringFormat string_Right = new()
     {
         Alignment = StringAlignment.Far,
@@ -29,6 +29,19 @@ internal class Program
 
     private static void Main(string[] args)
     {
+        DrawMap(new DrawConfig()
+        {
+            MapSize = 1080,
+            LatSta = 20,
+            LatEnd = 50,
+            LonSta = 120,
+            LonEnd = 150,
+            MagSizeType = 11,
+            TextInt = 1,
+            EnableLegend = true
+        }).Save("test.png", ImageFormat.Png);
+        return;
+
         Console.WriteLine("MEVM v1.0\n");
 
         var now = DateTime.Now;
@@ -470,7 +483,7 @@ internal class Program
     /// <param name="config">設定</param>
     /// <returns>描画された地図</returns>
     /// <exception cref="Exception">マップデータの読み込みに失敗した場合</exception>
-    public static Bitmap DrawMap(DrawConfig config)//todo:新しい描画方法に変える
+    public static Bitmap DrawMap(MonthlyEarthquakesVideoMaker.DrawConfig config)
     {
         var config_ig = new MapDrawer.DrawConfig()
         {
@@ -492,7 +505,7 @@ internal class Program
         var g = Graphics.FromImage(mapImg);
         g.Clear(color.Map.Sea);
 
-        var json_w = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_Base_OnlyGeometry>(File.ReadAllText("map-world.geojson") ?? throw new Exception("マップデータの読み込みに失敗しました。")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
+        var json_w = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_Base>(File.ReadAllText("map-world.geojson") ?? throw new Exception("マップデータの読み込みに失敗しました。")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
         MapDrawer.Drawing_Common.DrawMap_OnlyGeometry(g, json_w, config_ig);
 
         config_ig.Colors = new MapDrawer.DrawConfig.C_Colors()
