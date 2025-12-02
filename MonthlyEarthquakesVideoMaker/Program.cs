@@ -29,23 +29,24 @@ internal class Program
 
     private static void Main(string[] args)
     {
-        DrawMap(new DrawConfig()
-        {
-            MapSize = 1080,
-            LatSta = 20,
-            LatEnd = 50,
-            LonSta = 120,
-            LonEnd = 150,
-            MagSizeType = 11,
-            TextInt = 1,
-            EnableLegend = true
-        }).Save("test.png", ImageFormat.Png);
-        return;
+        //DrawMap(new DrawConfig()
+        //{
+        //    MapSize = 1080,
+        //    LatSta = 20,
+        //    LatEnd = 50,
+        //    LonSta = 120,
+        //    LonEnd = 150,
+        //    MagSizeType = 11,
+        //    TextInt = 1,
+        //    EnableLegend = true
+        //}).Save("test.png", ImageFormat.Png);
+        //return;
 
         Console.WriteLine("MEVM v1.0\n");
 
         var now = DateTime.Now;
-        var get = now.AddMonths(-1);
+        var get_t = now.AddMonths(-1);
+        var get = new DateTime(get_t.Year, get_t.Month, 1);
 
 # if DEBUG_NOTE
         config = new()
@@ -64,18 +65,56 @@ internal class Program
         var res = Console.ReadLine();
         if (res == "y" || res == "Y")
         {
-            Console.WriteLine("取得中...");
-            for (var dt = new DateTime(get.Year, get.Month, 1); dt < new DateTime(now.Year, now.Month, 1); dt = dt.AddDays(1))
+            if (false)//取得するか
             {
-                Console.WriteLine(dt.ToString("yyyy/MM/dd"));
-                GetDB1d(dt);
-                GetHypo(dt);
-                Thread.Sleep(WAIT);
+                Console.WriteLine("取得中...");
+                for (var dt = new DateTime(get.Year, get.Month, 1); dt < new DateTime(now.Year, now.Month, 1); dt = dt.AddDays(1))
+                {
+                    //Console.WriteLine(dt.ToString("yyyy/MM/dd"));
+                    Directory.CreateDirectory(config.SaveDir_EqData + "\\EQDB\\" + dt.ToString("yyyy\\\\MM"));
+                    GetDB1d(dt);
+                    Directory.CreateDirectory(config.SaveDir_EqData + "\\HypoList\\" + dt.ToString("yyyy\\\\MM"));
+                    GetHypo(dt);
+                    Thread.Sleep(WAIT);
+                }
+
+                var psi_git1 = new ProcessStartInfo()
+                {
+                    FileName = "git.exe",
+                    Arguments = "add .",
+                    WorkingDirectory = config.SaveDir_EqData,
+                    UseShellExecute = false
+                };
+                var psi_git2 = new ProcessStartInfo()
+                {
+                    FileName = "git.exe",
+                    Arguments = "commit -m\"[add] " + ym + " (Executed by MonthlyEarthquakesVideoMaker)\"",
+                    WorkingDirectory = config.SaveDir_EqData,
+                    UseShellExecute = false
+                };
+                var psi_git3 = new ProcessStartInfo()
+                {
+                    FileName = "git.exe",
+                    Arguments = "push",
+                    WorkingDirectory = config.SaveDir_EqData,
+                    UseShellExecute = false
+                };
+
+                Console.WriteLine("git処理中...(add)");
+                using var p_git1 = Process.Start(psi_git1)!;
+                p_git1.WaitForExit();
+                Console.WriteLine("git処理中...(commit)");
+                using var p_git2 = Process.Start(psi_git2)!;
+                p_git2.WaitForExit();
+                Console.WriteLine("git処理中...(push)");
+                using var p_git3 = Process.Start(psi_git3)!;
+                p_git3.WaitForExit();
             }
             Console.WriteLine("描画中...");
             ReadyVideo(get);
         }
-        Console.WriteLine("終了しました。");
+        Console.WriteLine("終了しました。エクスプローラーを開いています...");
+        Process.Start("explorer.exe", config.SaveDir_Video);
     }
 
 
@@ -85,51 +124,42 @@ internal class Program
     /// <param name="getDate">取得日</param>
     public static void GetDB1d(DateTime getDate)
     {
-        try
-        {
-            var savePath = config.SaveDir_EqData + "\\EQDB\\" + getDate.ToString("yyyy\\\\MM\\\\dd") + ".csv";
-            var response = Regex.Unescape(client.GetStringAsync("https://www.data.jma.go.jp/svd/eqdb/data/shindo/api/api.php?mode=search&dateTimeF[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeF[]=00:00&dateTimeT[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeT[]=23:59&mag[]=0.0&mag[]=9.9&dep[]=0&dep[]=999&epi[]=99&pref[]=99&city[]=99&station[]=99&obsInt=1&maxInt=1&additionalC=true&Sort=S0&Comp=C0&seisCount=false&observed=false").Result);
-            var json = JsonNode.Parse(response);
+        var savePath = config.SaveDir_EqData + "\\EQDB\\" + getDate.ToString("yyyy\\\\MM\\\\dd") + ".csv";
+        var response = Regex.Unescape(client.GetStringAsync("https://www.data.jma.go.jp/svd/eqdb/data/shindo/api/api.php?mode=search&dateTimeF[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeF[]=00:00&dateTimeT[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeT[]=23:59&mag[]=0.0&mag[]=9.9&dep[]=0&dep[]=999&epi[]=99&pref[]=99&city[]=99&station[]=99&obsInt=1&maxInt=1&additionalC=true&Sort=S0&Comp=C0&seisCount=false&observed=false").Result);
+        var json = JsonNode.Parse(response);
 
-            var csv = new StringBuilder("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
-            var res = json!["res"];
-            var viewText = "";
-            if (res is JsonArray jsonArray)
+        var csv = new StringBuilder("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
+        var res = json!["res"];
+        var viewText = "";
+        if (res is JsonArray jsonArray)
+        {
+            foreach (var data in res.AsArray())
             {
-                foreach (var data in res.AsArray())
-                {
-                    var ot = (string?)data!["ot"]!.AsValue();
-                    if (ot == null)
-                        continue;
-                    csv.Append(ot.Replace(" ", ","));
-                    csv.Append(',');
-                    csv.Append((string?)data["name"]!.AsValue());
-                    csv.Append(',');
-                    csv.Append((string?)data["latS"]!.AsValue());
-                    csv.Append(',');
-                    csv.Append((string?)data["lonS"]!.AsValue());
-                    csv.Append(',');
-                    csv.Append((string?)data["dep"]!.AsValue());
-                    csv.Append(',');
-                    csv.Append((string?)data["mag"]!.AsValue());
-                    csv.Append(',');
-                    csv.Append((string?)data["maxI"]!.AsValue());
-                    csv.AppendLine();
-                }
-                viewText = res.AsArray().Count.ToString();
+                var ot = (string?)data!["ot"]!.AsValue();
+                if (ot == null)
+                    continue;
+                csv.Append(ot.Replace(" ", ","));
+                csv.Append(',');
+                csv.Append((string?)data["name"]!.AsValue());
+                csv.Append(',');
+                csv.Append((string?)data["latS"]!.AsValue());
+                csv.Append(',');
+                csv.Append((string?)data["lonS"]!.AsValue());
+                csv.Append(',');
+                csv.Append((string?)data["dep"]!.AsValue());
+                csv.Append(',');
+                csv.Append((string?)data["mag"]!.AsValue());
+                csv.Append(',');
+                csv.Append((string?)data["maxI"]!.AsValue());
+                csv.AppendLine();
             }
-            else
-                viewText = (string)res!.AsValue()!;
+            viewText = res.AsArray().Count.ToString();
+        }
+        else
+            viewText = (string)res!.AsValue()!;
 
-            Directory.CreateDirectory(config.SaveDir_EqData + "\\HypoList\\" + getDate.ToString("yyyy\\\\MM"));
-            File.WriteAllText(savePath, csv.ToString());
-            Console.WriteLine(getDate.ToString("yyyy/MM/dd") + " EQDB: " + viewText);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
-            throw;
-        }
+        File.WriteAllText(savePath, csv.ToString());
+        Console.WriteLine(getDate.ToString("yyyy/MM/dd") + " EQDB: " + viewText);
     }
 
     public static readonly HtmlParser parser = new();
@@ -140,35 +170,26 @@ internal class Program
     /// <remarks>震度は---になります</remarks>
     public static void GetHypo(DateTime getDate)
     {
-        try
-        {
-            var savePath = config.SaveDir_EqData + "\\HypoList\\" + getDate.ToString("yyyy\\\\MM\\\\dd") + ".csv";
-            var response = client.GetStringAsync("https://www.data.jma.go.jp/eqev/data/daily_map/" + getDate.ToString("yyyyMMdd") + ".html").Result;
-            var document = parser.ParseDocument(response);
-            var pre = document.QuerySelector("pre")!.TextContent;
-            var lines_converted = pre.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(2).Select(HypoText2EqdbData);
+        var savePath = config.SaveDir_EqData + "\\HypoList\\" + getDate.ToString("yyyy\\\\MM\\\\dd") + ".csv";
+        var response = client.GetStringAsync("https://www.data.jma.go.jp/eqev/data/daily_map/" + getDate.ToString("yyyyMMdd") + ".html").Result;
+        var document = parser.ParseDocument(response);
+        var pre = document.QuerySelector("pre")!.TextContent;
+        var lines_converted = pre.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(2).Select(HypoText2EqdbData);
 
-            var csv = "地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n" + string.Join('\n', lines_converted)
-                .Replace(",- km,", ",不明,").Replace(",-,", ",不明,").Replace("'", "′")
-                .Replace("/1/", "/01/").Replace("/2/", "/02/").Replace("/3/", "/03/").Replace("/4/", "/04/").Replace("/5/", "/05/")//月調整
-                .Replace("/6/", "/06/").Replace("/7/", "/07/").Replace("/8/", "/08/").Replace("/9/", "/09/")
-                .Replace("/1,", "/01,").Replace("/2,", "/02,").Replace("/3,", "/03,").Replace("/4,", "/04,").Replace("/5,", "/05,")//日調整
-                .Replace("/6,", "/06,").Replace("/7,", "/07,").Replace("/8,", "/08,").Replace("/9,", "/09,")
-                .Replace(":1.", ":01.").Replace(":2.", ":02.").Replace(":3.", ":03.").Replace(":4.", ":04.").Replace(":5.", ":05.")//秒調整
-                .Replace(":6.", ":06.").Replace(":7.", ":07.").Replace(":8.", ":08.").Replace(":9.", ":09.").Replace(":0.", ":00.")
-                .Replace("°1.", "°01.").Replace("°2.", "°02.").Replace("°3.", "°03.").Replace("°4.", "°04.").Replace("°5.", "°05.")//緯度経度分調整
-                .Replace("°6.", "°06.").Replace("°7.", "°07.").Replace("°8.", "°08.").Replace("°9.", "°09.").Replace("°0.", "°00.")
-                + "\n";
+        var csv = "地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n" + string.Join('\n', lines_converted)
+            .Replace(",- km,", ",不明,").Replace(",-,", ",不明,").Replace("'", "′")
+            .Replace("/1/", "/01/").Replace("/2/", "/02/").Replace("/3/", "/03/").Replace("/4/", "/04/").Replace("/5/", "/05/")//月調整
+            .Replace("/6/", "/06/").Replace("/7/", "/07/").Replace("/8/", "/08/").Replace("/9/", "/09/")
+            .Replace("/1,", "/01,").Replace("/2,", "/02,").Replace("/3,", "/03,").Replace("/4,", "/04,").Replace("/5,", "/05,")//日調整
+            .Replace("/6,", "/06,").Replace("/7,", "/07,").Replace("/8,", "/08,").Replace("/9,", "/09,")
+            .Replace(":1.", ":01.").Replace(":2.", ":02.").Replace(":3.", ":03.").Replace(":4.", ":04.").Replace(":5.", ":05.")//秒調整
+            .Replace(":6.", ":06.").Replace(":7.", ":07.").Replace(":8.", ":08.").Replace(":9.", ":09.").Replace(":0.", ":00.")
+            .Replace("°1.", "°01.").Replace("°2.", "°02.").Replace("°3.", "°03.").Replace("°4.", "°04.").Replace("°5.", "°05.")//緯度経度分調整
+            .Replace("°6.", "°06.").Replace("°7.", "°07.").Replace("°8.", "°08.").Replace("°9.", "°09.").Replace("°0.", "°00.")
+            + "\n";
 
-            Directory.CreateDirectory(config.SaveDir_EqData + "\\HypoList\\" + getDate.ToString("yyyy\\\\MM"));
-            File.WriteAllText(savePath, csv.ToString());
-            Console.WriteLine(getDate.ToString("yyyy/MM/dd") + " Hypo: " + lines_converted.Count());
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine(ex);
-            throw;
-        }
+        File.WriteAllText(savePath, csv.ToString());
+        Console.WriteLine(getDate.ToString("yyyy/MM/dd") + " Hypo: " + lines_converted.Count());
     }
 
 
@@ -190,112 +211,108 @@ internal class Program
     /// </summary>
     public static void ReadyVideo(DateTime dt)
     {
-        try
+        var files = Directory.EnumerateFiles(config.SaveDir_EqData + "\\EQDB\\" + dt.ToString("yyyy\\\\MM")).Concat(Directory.EnumerateFiles(config.SaveDir_EqData + "\\HypoList\\" + dt.ToString("yyyy\\\\MM")));
+        var datas_ = MergeFiles([.. files]).Replace("\r", "").Split('\n');//gitで触ると\r付く
+        var datas = (IEnumerable<Data>)datas_.Where(x => x.Contains('°')).Where(x => !x.Contains("不明データ")).Select(Text2Data).OrderBy(a => a.Time);//データじゃないやつついでに緯度経度ないやつも除外
+
+        var drawConfig = new DrawConfig()
         {
-            var files = Directory.EnumerateFiles(config.SaveDir_EqData + "\\EQDB\\" + dt.ToString("yyyy\\\\MM\\\\dd") + ".csv").Concat(Directory.EnumerateFiles(config.SaveDir_EqData + "\\HypoList\\" + dt.ToString("yyyy\\\\MM\\\\dd") + ".csv"));
-            var datas_ = MergeFiles([.. files]).Replace("\r", "").Split('\n');//gitで触ると\r付く
-            var datas = (IEnumerable<Data>)datas_.Where(x => x.Contains('°')).Where(x => !x.Contains("不明データ")).Select(Text2Data).OrderBy(a => a.Time);//データじゃないやつついでに緯度経度ないやつも除外
+            StartTime = dt,
+            EndTime = dt.AddMonths(1),
+            DrawSpan = new TimeSpan(0, 10, 0),
+            DisappTime = new TimeSpan(12, 0, 0),
+            MapSize = 1080,
+            LatSta = 20,
+            LatEnd = 50,
+            LonSta = 120,
+            LonEnd = 150,
+            MagSizeType = 21,
+            TextInt = 1,
+            EnableLegend = true
+        };
+        var saveDir = "output\\" + DateTime.Now.ToString("yyyyMMddHHmmss");
+        var dataSum = datas.Count();
+        Directory.CreateDirectory(saveDir);
+        var zoomW = drawConfig.MapSize / (drawConfig.LonEnd - drawConfig.LonSta);
+        var zoomH = drawConfig.MapSize / (drawConfig.LatEnd - drawConfig.LatSta);
+        var sizeX = drawConfig.MagSizeType - (drawConfig.MagSizeType / 10 * 10);//倍率
+        var drawTime = drawConfig.StartTime;//描画対象時間
+        var bitmap_baseMap = DrawMap(drawConfig);
+        var bitmap_legend = DrawLegend(drawConfig);
 
-            var drawConfig = new DrawConfig()
+        //各描画開始
+        for (var i = 1; drawTime < drawConfig.EndTime; i++, drawTime += drawConfig.DrawSpan)//DateTime:古<新==true
+        {
+            datas = [.. datas.SkipWhile(data => data.Time < drawTime - drawConfig.DisappTime)];//除外//SkipWhileなので.OrderBy(a => a.Time)で並び替えられていることが必要
+            var datas_Draw = datas.Where(data => data.Time < drawTime + drawConfig.DrawSpan);//抜き出し
+
+            using var bitmap = (Bitmap)bitmap_baseMap.Clone();
+            using var g = Graphics.FromImage(bitmap);
+
+            var texts = new StringBuilder[] { new("\n"), new("\n"), new("999.9km\n\n"), new("\n"), new("\n") };
+            var alpha = color.Hypo_Alpha;
+
+            var font_msD45 = new Font(font, drawConfig.MapSize / 45f, GraphicsUnit.Pixel);
+            var sb_text = new SolidBrush(color.Text);
+            var sb_text_sub = new SolidBrush(Color.FromArgb(127, color.Text));
+            var pen_hypo = new Pen(Color.FromArgb(alpha, 127, 127, 127));
+            var pen_line = new Pen(Color.FromArgb(127, color.Text), drawConfig.MapSize / 1080f);
+
+            foreach (var data in datas_Draw)//imageとの違い
             {
-                StartTime = dt,
-                EndTime = dt.AddMonths(1),
-                DrawSpan = new TimeSpan(0, 10, 0),
-                DisappTime = new TimeSpan(12, 0, 0),
-                MapSize = 1080,
-                LatSta = 20,
-                LatEnd = 50,
-                LonSta = 120,
-                LonEnd = 150,
-                MagSizeType = 21,
-                TextInt = 1,
-                EnableLegend = true
-            };
-            var saveDir = "output\\" + DateTime.Now.ToString("yyyyMMddHHmmss");
-            var dataSum = datas.Count();
-            Directory.CreateDirectory(saveDir);
-            var zoomW = drawConfig.MapSize / (drawConfig.LonEnd - drawConfig.LonSta);
-            var zoomH = drawConfig.MapSize / (drawConfig.LatEnd - drawConfig.LatSta);
-            var sizeX = drawConfig.MagSizeType - (drawConfig.MagSizeType / 10 * 10);//倍率
-            var drawTime = drawConfig.StartTime;//描画対象時間
-            var bitmap_baseMap = DrawMap(drawConfig);
-            var bitmap_legend = DrawLegend(drawConfig);
-
-            //各描画開始
-            for (var i = 1; drawTime < drawConfig.EndTime; i++)//DateTime:古<新==true
-            {
-                datas = [.. datas.SkipWhile(data => data.Time < drawTime - drawConfig.DisappTime)];//除外//SkipWhileなので.OrderBy(a => a.Time)で並び替えられていることが必要
-                var datas_Draw = datas.Where(data => data.Time < drawTime + drawConfig.DrawSpan);//抜き出し
-
-                using var bitmap = (Bitmap)bitmap_baseMap.Clone();
-                using var g = Graphics.FromImage(bitmap);
-
-                var texts = new StringBuilder[] { new("\n"), new("\n"), new("999.9km\n\n"), new("\n"), new("\n") };
-                var alpha = color.Hypo_Alpha;
-
-                var font_msD45 = new Font(font, drawConfig.MapSize / 45f, GraphicsUnit.Pixel);
-                var sb_text = new SolidBrush(color.Text);
-                var sb_text_sub = new SolidBrush(Color.FromArgb(127, color.Text));
-                var pen_hypo = new Pen(Color.FromArgb(alpha, 127, 127, 127));
-                var pen_line = new Pen(Color.FromArgb(127, color.Text), drawConfig.MapSize / 1080f);
-
-                foreach (var data in datas_Draw)//imageとの違い
+                //imageとの違い
+                alpha = data.Time >= drawTime ? color.Hypo_Alpha : (int)((1d - (drawTime - data.Time).TotalSeconds / drawConfig.DisappTime.TotalSeconds) * color.Hypo_Alpha);//消える時間の割合*基本透明度
+                var size = (float)(drawConfig.MagSizeType / 10 == 1
+                    ? (Math.Max(1, data.Mag) * drawConfig.MapSize / 216d)
+                    : (Math.Max(1, data.Mag) * (Math.Max(1, data.Mag) * drawConfig.MapSize / 216d))) * sizeX;//精度と統一のためd
+                g.FillEllipse(Depth2Color(data.Depth, alpha), (float)(((data.Lon - drawConfig.LonSta) * zoomW) - size / 2f), (float)(((drawConfig.LatEnd - data.Lat) * zoomH) - size / 2f), size, size);
+                g.DrawEllipse(new Pen(Color.FromArgb(alpha, 127, 127, 127)), (float)(((data.Lon - drawConfig.LonSta) * zoomW) - size / 2f), (float)(((drawConfig.LatEnd - data.Lat) * zoomH) - size / 2f), size, size);
+                if ((Math.Abs(data.MaxInt) >= drawConfig.TextInt && data.MaxInt != -1) || (drawConfig.TextInt == -1 && data.MaxInt == -1))//↑imageとの違い
                 {
-                    //imageとの違い
-                    alpha = data.Time >= drawTime ? color.Hypo_Alpha : (int)((1d - (drawTime - data.Time).TotalSeconds / drawConfig.DisappTime.TotalSeconds) * color.Hypo_Alpha);//消える時間の割合*基本透明度
-                    var size = (float)(drawConfig.MagSizeType / 10 == 1
-                        ? (Math.Max(1, data.Mag) * drawConfig.MapSize / 216d)
-                        : (Math.Max(1, data.Mag) * (Math.Max(1, data.Mag) * drawConfig.MapSize / 216d))) * sizeX;//精度と統一のためd
-                    g.FillEllipse(Depth2Color(data.Depth, alpha), (float)(((data.Lon - drawConfig.LonSta) * zoomW) - size / 2f), (float)(((drawConfig.LatEnd - data.Lat) * zoomH) - size / 2f), size, size);
-                    g.DrawEllipse(new Pen(Color.FromArgb(alpha, 127, 127, 127)), (float)(((data.Lon - drawConfig.LonSta) * zoomW) - size / 2f), (float)(((drawConfig.LatEnd - data.Lat) * zoomH) - size / 2f), size, size);
-                    if ((Math.Abs(data.MaxInt) >= drawConfig.TextInt && data.MaxInt != -1) || (drawConfig.TextInt == -1 && data.MaxInt == -1))//↑imageとの違い
-                    {
-                        texts[0].AppendLine(data.Time.ToString("yyyy/MM/dd HH:mm:ss.f"));
-                        texts[1].AppendLine(data.Hypo);//詳細不明の可能性
-                        texts[2].Append(data.Depth == null ? "不明" : data.Depth.ToString());
-                        texts[2].AppendLine(data.Depth == null ? "" : "km");
-                        texts[3].Append(double.IsNaN(data.Mag) ? "不明" : 'M');
-                        texts[3].AppendLine(double.IsNaN(data.Mag) ? "" : data.Mag.ToString("0.0"));
-                        texts[4].AppendLine(MaxIntInt2String(data.MaxInt, true));
-                    }
+                    texts[0].AppendLine(data.Time.ToString("yyyy/MM/dd HH:mm:ss.f"));
+                    texts[1].AppendLine(data.Hypo);//詳細不明の可能性
+                    texts[2].Append(data.Depth == null ? "不明" : data.Depth.ToString());
+                    texts[2].AppendLine(data.Depth == null ? "" : "km");
+                    texts[3].Append(double.IsNaN(data.Mag) ? "不明" : 'M');
+                    texts[3].AppendLine(double.IsNaN(data.Mag) ? "" : data.Mag.ToString("0.0"));
+                    texts[4].AppendLine(MaxIntInt2String(data.MaxInt, true));
                 }
-                var depthSize = g.MeasureString(texts[2].ToString(), font_msD45);//string Formatに必要
-                var depthHeadSize = g.MeasureString("999.9km\n深さ ", font_msD45);//最大幅計算用
-                var oneLineHeight = g.MeasureString("999.9km", font_msD45).Height;//調整用
-
-                g.FillRectangle(new SolidBrush(color.InfoBack), drawConfig.MapSize, 0, bitmap.Width - drawConfig.MapSize, drawConfig.MapSize);
-                g.DrawString("発生日時", font_msD45, sb_text_sub, drawConfig.MapSize, 0);
-                g.DrawString("震央", font_msD45, sb_text_sub, drawConfig.MapSize * 1.25f, 0);
-                g.DrawString("深さ \n   ", font_msD45, sb_text_sub, new RectangleF(new PointF(drawConfig.MapSize * 1.5f, 0), depthHeadSize), string_Right);
-                g.DrawString("規模", font_msD45, sb_text_sub, drawConfig.MapSize * 1.602625f, 0);
-                g.DrawString("最大震度", font_msD45, sb_text_sub, drawConfig.MapSize * 1.675f, 0); g.DrawString(texts[0].ToString(), font_msD45, sb_text, drawConfig.MapSize, 0);
-
-                g.DrawString(texts[0].ToString(), font_msD45, sb_text, drawConfig.MapSize, 0);
-                g.DrawString(texts[1].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.25f, 0);
-                g.FillRectangle(new SolidBrush(color.InfoBack), drawConfig.MapSize * 1.5f, drawConfig.MapSize / 30f, bitmap.Width - drawConfig.MapSize * 1.5f, drawConfig.MapSize * 29 / 30f);
-                g.DrawString(texts[2].ToString(), font_msD45, sb_text, new RectangleF(new PointF(drawConfig.MapSize * 1.5f, -oneLineHeight), depthSize), string_Right);
-                g.DrawString(texts[3].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.602625f, 0);
-                g.DrawString(texts[4].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.675f, 0);
-                g.DrawLine(pen_line, drawConfig.MapSize, drawConfig.MapSize / 30f, bitmap.Width, drawConfig.MapSize / 30f);
-
-                g.DrawImage(bitmap_legend, 0, 0);
-                var xBase = drawConfig.MapSize;
-                g.DrawString(drawTime.ToString("yyyy/MM/dd HH:mm:ss"), new Font(font, drawConfig.MapSize / 30f, GraphicsUnit.Pixel), new SolidBrush(color.Text), xBase + drawConfig.MapSize / 9f * 4, drawConfig.MapSize * 23 / 24f);
-
-                var savePath = saveDir + "\\" + i.ToString("d5") + ".png";
-                bitmap.Save(savePath, ImageFormat.Png);
-                Console.WriteLine(drawTime.ToString("yyyy/MM/dd HH:mm:ss") + "  " + i.ToString("d5") + ".png : " + datas_Draw.Count() + "  (内部残り: " + datas.Count() + " / " + dataSum + ")");
-                drawTime += drawConfig.DrawSpan;
-                if (i % 10 == 0)
-                    GC.Collect();
             }
-            using var pro = Process.Start("ffmpeg", "-framerate 30 -i \"" + saveDir + "\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r 30 \"" + config.SaveDir_Video + "\\" + dt.ToString("yyyyMM") + ".mp4\"");
-            pro.WaitForExit();
+            var depthSize = g.MeasureString(texts[2].ToString(), font_msD45);//string Formatに必要
+            var depthHeadSize = g.MeasureString("999.9km\n深さ ", font_msD45);//最大幅計算用
+            var oneLineHeight = g.MeasureString("999.9km", font_msD45).Height;//調整用
+
+            g.FillRectangle(new SolidBrush(color.InfoBack), drawConfig.MapSize, 0, bitmap.Width - drawConfig.MapSize, drawConfig.MapSize);
+            g.DrawString("発生日時", font_msD45, sb_text_sub, drawConfig.MapSize, 0);
+            g.DrawString("震央", font_msD45, sb_text_sub, drawConfig.MapSize * 1.25f, 0);
+            g.DrawString("深さ \n   ", font_msD45, sb_text_sub, new RectangleF(new PointF(drawConfig.MapSize * 1.5f, 0), depthHeadSize), string_Right);
+            g.DrawString("規模", font_msD45, sb_text_sub, drawConfig.MapSize * 1.602625f, 0);
+            g.DrawString("最大震度", font_msD45, sb_text_sub, drawConfig.MapSize * 1.675f, 0); g.DrawString(texts[0].ToString(), font_msD45, sb_text, drawConfig.MapSize, 0);
+
+            g.DrawString(texts[0].ToString(), font_msD45, sb_text, drawConfig.MapSize, 0);
+            g.DrawString(texts[1].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.25f, 0);
+            g.FillRectangle(new SolidBrush(color.InfoBack), drawConfig.MapSize * 1.5f, drawConfig.MapSize / 30f, bitmap.Width - drawConfig.MapSize * 1.5f, drawConfig.MapSize * 29 / 30f);
+            g.DrawString(texts[2].ToString(), font_msD45, sb_text, new RectangleF(new PointF(drawConfig.MapSize * 1.5f, -oneLineHeight), depthSize), string_Right);
+            g.DrawString(texts[3].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.602625f, 0);
+            g.DrawString(texts[4].ToString(), font_msD45, sb_text, drawConfig.MapSize * 1.675f, 0);
+            g.DrawLine(pen_line, drawConfig.MapSize, drawConfig.MapSize / 30f, bitmap.Width, drawConfig.MapSize / 30f);
+
+            g.DrawImage(bitmap_legend, 0, 0);
+            var xBase = drawConfig.MapSize;
+            g.DrawString(drawTime.ToString("yyyy/MM/dd HH:mm:ss"), new Font(font, drawConfig.MapSize / 30f, GraphicsUnit.Pixel), new SolidBrush(color.Text), xBase + drawConfig.MapSize / 9f * 4, drawConfig.MapSize * 23 / 24f);
+
+            var savePath = saveDir + "\\" + i.ToString("d5") + ".png";
+            bitmap.Save(savePath, ImageFormat.Png);
+            Console.WriteLine(drawTime.ToString("yyyy/MM/dd HH:mm:ss") + "  " + i.ToString("d5") + ".png : " + datas_Draw.Count() + "  (内部残り: " + datas.Count() + " / " + dataSum + ")");
+
+            if (i % 10 == 0)
+                GC.Collect();
         }
-        catch (Exception ex)
-        {
-            Console.WriteLine("エラーが発生しました。" + ex + "\n再度実行してください。");
-        }
+        using var pro = Process.Start("ffmpeg", "-framerate 30 -i \"" + saveDir + "\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r 30 \"" + config.SaveDir_Video + "\\" + dt.ToString("yyyyMM") + ".mp4\"");
+        pro.WaitForExit();
+
+        Console.WriteLine("画像削除中...");
+        Directory.Delete(saveDir);
     }
 
 
@@ -305,24 +322,7 @@ internal class Program
     public static string MergeFiles(string[] files)
     {
         if (files.Length == 0)
-        {
-            Console.WriteLine("結合するファイルのパスを1行ごとに入力してください。空文字が入力されたら結合を開始します。フォルダのパスを入力するとすべて読み込みます。※観測震度検索をしているものとしていないものの結合はできますが他ソフトで処理をする際エラーとなる可能性があります。このソフトでは問題ありません。");
-            List<string> filesTmp = [];
-            while (true)
-            {
-                var file = Console.ReadLine();
-                if (!string.IsNullOrEmpty(file))
-                    filesTmp.Add(file.Replace("\"", ""));
-                else if (filesTmp.Count == 0)
-                {
-                    Console.WriteLine("中止します。");
-                    return "";
-                }
-                else
-                    break;
-            }
-            files = [.. filesTmp];
-        }
+            throw new Exception("ファイルがありません。");
 
         var stringBuilder = new StringBuilder();
         List<string> files2 = [];
@@ -331,25 +331,16 @@ internal class Program
             var f = file.Replace("\"", "");
             if (f.EndsWith(".csv"))
                 files2.Add(f);
-            else
-            {
-                Console.WriteLine("ファイル名取得中... ");
-                Console.WriteLine(f);
-                var openPaths = Directory.EnumerateFiles(f, "*.csv", SearchOption.AllDirectories);
-                foreach (var path in openPaths)
-                    files2.Add(path);
-            }
         }
         foreach (var file in files2)
         {
             if (File.Exists(file))
             {
-                Console.WriteLine("読み込み中... ");
                 Console.WriteLine(file);
                 stringBuilder.Append(File.ReadAllText(file).Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度,検索対象最大震度\n", "").Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n", ""));
             }
             else
-                Console.WriteLine($"{file}が見つかりません。");
+                Console.WriteLine(file + "が見つかりません。");
         }
         stringBuilder.Insert(0, "地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
         return stringBuilder.ToString();
