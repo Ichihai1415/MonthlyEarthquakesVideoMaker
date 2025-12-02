@@ -40,6 +40,9 @@ internal class Program
         //    TextInt = 1,
         //    EnableLegend = true
         //}).Save("test.png", ImageFormat.Png);
+
+        //Process.Start("explorer.exe", config.SaveDir_Video);
+
         //return;
 
         Console.WriteLine("MEVM v1.0\n");
@@ -65,7 +68,7 @@ internal class Program
         var res = Console.ReadLine();
         if (res == "y" || res == "Y")
         {
-            if (false)//取得するか
+            if (true)//取得するか
             {
                 Console.WriteLine("取得中...");
                 for (var dt = new DateTime(get.Year, get.Month, 1); dt < new DateTime(now.Year, now.Month, 1); dt = dt.AddDays(1))
@@ -130,8 +133,8 @@ internal class Program
 
         var csv = new StringBuilder("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
         var res = json!["res"];
-        var viewText = "";
-        if (res is JsonArray jsonArray)
+        string? viewText;
+        if (res is JsonArray)
         {
             foreach (var data in res.AsArray())
             {
@@ -308,11 +311,11 @@ internal class Program
             if (i % 10 == 0)
                 GC.Collect();
         }
-        using var pro = Process.Start("ffmpeg", "-framerate 30 -i \"" + saveDir + "\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r 30 \"" + config.SaveDir_Video + "\\" + dt.ToString("yyyyMM") + ".mp4\"");
+        using var pro = Process.Start("ffmpeg", "-framerate 30 -i \"" + saveDir + "\\%05d.png\" -vcodec libx264 -pix_fmt yuv420p -r 30 \"" + config.SaveDir_Video + "\\monthly-eq_" + dt.ToString("yyyyMM") + ".mp4\"");
         pro.WaitForExit();
 
         Console.WriteLine("画像削除中...");
-        Directory.Delete(saveDir);
+        Directory.Delete(saveDir, true);
     }
 
 
@@ -474,7 +477,7 @@ internal class Program
     /// <param name="config">設定</param>
     /// <returns>描画された地図</returns>
     /// <exception cref="Exception">マップデータの読み込みに失敗した場合</exception>
-    public static Bitmap DrawMap(MonthlyEarthquakesVideoMaker.DrawConfig config)
+    public static Bitmap DrawMap(DrawConfig config)
     {
         var config_ig = new MapDrawer.DrawConfig()
         {
@@ -491,8 +494,6 @@ internal class Program
 
         };
         var mapImg = new Bitmap(config.MapSize * 16 / 9, config.MapSize);
-        var zoomW = config.MapSize / (config.LonEnd - config.LonSta);
-        var zoomH = config.MapSize / (config.LatEnd - config.LatSta);
         var g = Graphics.FromImage(mapImg);
         g.Clear(color.Map.Sea);
 
