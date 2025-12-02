@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Remove="C:\Users\proje\.nuget\packages\ichihai1415.geojson\1.0.3\contentFiles\any\net9.0\new_lib.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.4.0" />
-    <PackageReference Include="Ichihai1415.GeoJSON" Version="1.0.3" />
+    <PackageReference Include="Ichihai1415.GeoJSON" Version="1.0.4" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
   </ItemGroup>
 

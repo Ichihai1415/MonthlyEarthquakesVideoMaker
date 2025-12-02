@@ -1,7 +1,6 @@
 ﻿using AngleSharp.Html.Parser;
 using Ichihai1415.GeoJSON;
 using MonthlyEarthquakesVideoMaker;
-using MonthlyEarthquakesVideoMaker.Properties;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -46,7 +45,7 @@ internal class Program
 
         var ym = get.ToString("yyyyMM");
 
-        if (now.Day == 2)
+        if (now.Day != 2)
             Console.WriteLine("注意: 本日は" + now.Day + "日です。");
         Console.WriteLine(ym + " で取得・作成していいですか？[y/n]");
         var res = Console.ReadLine();
@@ -321,7 +320,7 @@ internal class Program
                 files2.Add(f);
             else
             {
-                Console.WriteLine("ファイル名取得中... ", false);
+                Console.WriteLine("ファイル名取得中... ");
                 Console.WriteLine(f);
                 var openPaths = Directory.EnumerateFiles(f, "*.csv", SearchOption.AllDirectories);
                 foreach (var path in openPaths)
@@ -332,7 +331,7 @@ internal class Program
         {
             if (File.Exists(file))
             {
-                Console.WriteLine("読み込み中... ", false);
+                Console.WriteLine("読み込み中... ");
                 Console.WriteLine(file);
                 stringBuilder.Append(File.ReadAllText(file).Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度,検索対象最大震度\n", "").Replace("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n", ""));
             }
@@ -473,82 +472,39 @@ internal class Program
     /// <exception cref="Exception">マップデータの読み込みに失敗した場合</exception>
     public static Bitmap DrawMap(DrawConfig config)//todo:新しい描画方法に変える
     {
+        var config_ig = new MapDrawer.DrawConfig()
+        {
+            Size_Map = new(config.MapSize, config.MapSize),
+            LatSta = (float)config.LatSta,
+            LatEnd = (float)config.LatEnd,
+            LonSta = (float)config.LonSta,
+            LonEnd = (float)config.LonEnd,
+            Colors = new MapDrawer.DrawConfig.C_Colors()//ここでは世界のみ
+            {
+                DefaultFillColor = color.Map.World,
+                LineColor = Color.FromArgb(0, 0, 0, 0),
+            }
+
+        };
         var mapImg = new Bitmap(config.MapSize * 16 / 9, config.MapSize);
         var zoomW = config.MapSize / (config.LonEnd - config.LonSta);
         var zoomH = config.MapSize / (config.LatEnd - config.LatSta);
-        var json = JsonNode.Parse(File.ReadAllText("map-world.geojson")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
         var g = Graphics.FromImage(mapImg);
         g.Clear(color.Map.Sea);
-        var maps = new GraphicsPath();
-        maps.StartFigure();
-        foreach (var json_1 in json["features"]!.AsArray())
-        {
-            if (json_1!["geometry"] == null)
-                continue;
-            var points = json_1["geometry"]!["coordinates"]![0]!.AsArray().Select(json_2 => new Point((int)(((double)json_2![0]! - config.LonSta) * zoomW), (int)((config.LatEnd - (double)json_2[1]!) * zoomH))).ToArray();
-            if (points.Length > 2)
-                maps.AddPolygon(points);
-        }
-        g.FillPath(new SolidBrush(color.Map.World), maps);
 
-        json = JsonNode.Parse(File.ReadAllText("map-jp.geojson")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
-        maps.Reset();
-        maps.StartFigure();
-        foreach (var json_1 in json["features"]!.AsArray())
+        var json_w = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_Base_OnlyGeometry>(File.ReadAllText("map-world.geojson") ?? throw new Exception("マップデータの読み込みに失敗しました。")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
+        MapDrawer.Drawing_Common.DrawMap_OnlyGeometry(g, json_w, config_ig);
+
+        config_ig.Colors = new MapDrawer.DrawConfig.C_Colors()
         {
-            if ((string?)json_1!["geometry"]!["type"] == "Polygon")
-            {
-                var points = json_1["geometry"]!["coordinates"]![0]!.AsArray().Select(json_2 => new Point((int)(((double)json_2![0]! - config.LonSta) * zoomW), (int)((config.LatEnd - (double)json_2[1]!) * zoomH))).ToArray();
-                if (points.Length > 2)
-                    maps.AddPolygon(points);
-            }
-            else
-            {
-                foreach (var json_2 in json_1["geometry"]!["coordinates"]!.AsArray())
-                {
-                    var points = json_2![0]!.AsArray().Select(json_3 => new Point((int)(((double)json_3![0]! - config.LonSta) * zoomW), (int)((config.LatEnd - (double)json_3[1]!) * zoomH))).ToArray();
-                    if (points.Length > 2)
-                        maps.AddPolygon(points);
-                }
-            }
-        }
-        g.FillPath(new SolidBrush(color.Map.Japan), maps);
-        g.DrawPath(new Pen(color.Map.Japan_Border, config.MapSize / 1080f), maps);
-        //var mdsize = g.MeasureString("地図データ:気象庁, Natural Earth", new Font(font, config.MapSize / 28, GraphicsUnit.Pixel));
-        //g.DrawString("地図データ:気象庁, Natural Earth", new Font(font, config.MapSize / 28, GraphicsUnit.Pixel), new SolidBrush(color.Text), config.MapSize - mdsize.Width, config.MapSize - mdsize.Height);
-        g.Dispose();
+            DefaultFillColor = color.Map.Japan,
+            LineColor = color.Map.Japan_Border,
+        };
+        var json_j = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_Base>(File.ReadAllText("map-jp.geojson") ?? throw new Exception("マップデータの読み込みに失敗しました。")) ?? throw new Exception("マップデータの読み込みに失敗しました。");
+        MapDrawer.Drawing_Common.DrawMap_OnlyGeometry(g, json_j, config_ig);
+
         return mapImg;
     }
-
-    public static Bitmap DrawMap(DrawConfig config, Config_Color color)
-    {
-        var mapData_jp = GeoJSONHelper.Deserialize<GeoJSONScheme.GeoJSON_JMA_Map>(Resources.Map_jp);
-        var bitmap = new Bitmap(1920, 1080);
-        using var g = Graphics.FromImage(bitmap);
-        g.Clear(Color.FromArgb(20, 40, 60));
-
-
-        using var gp_j = new GraphicsPath();
-
-        foreach (var feature in mapData_jp.Features)
-        {
-            if (feature.Geometry == null)
-                continue;
-            foreach (var singleObject in feature.Geometry.Coordinates.Objects)
-            {
-                gp_j.StartFigure();
-                var points = singleObject.MainPoints.Select(coordinate => new PointF((coordinate.Lon - config.LonSta) * (float)config.Zoom, (config.LatEnd - coordinate.Lat) * (float)config.Zoom));
-                if (points.Count() > 2)
-                    gp_j.AddPolygon(points.ToArray());
-            }
-            //}
-        }
-        var lineWidth = Math.Max(1f, (float)config.Zoom / 216f);
-
-        g.FillPath(new SolidBrush(Color.FromArgb(100, 100, 150)), gp_j);
-        g.DrawPath(new Pen(color.LineColor, lineWidth) { LineJoin = LineJoin.Round }, gp_j);//zoom > 200 ? 2 : 1
-    }
-
 
 
 }
