@@ -128,7 +128,7 @@ internal class Program
     public static void GetDB1d(DateTime getDate)
     {
         var savePath = config.SaveDir_EqData + "\\EQDB\\" + getDate.ToString("yyyy\\\\MM\\\\dd") + ".csv";
-        var response = Regex.Unescape(client.GetStringAsync("https://www.data.jma.go.jp/svd/eqdb/data/shindo/api/api.php?mode=search&dateTimeF[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeF[]=00:00&dateTimeT[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeT[]=23:59&mag[]=0.0&mag[]=9.9&dep[]=0&dep[]=999&epi[]=99&pref[]=99&city[]=99&station[]=99&obsInt=1&maxInt=1&additionalC=true&Sort=S0&Comp=C0&seisCount=false&observed=false").Result);
+        var response = Regex.Unescape(client.GetStringAsync("https://www.data.jma.go.jp/svd/eqdb/data/shindo/api/api.php?mode=search&dateTimeF[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeF[]=00:00&dateTimeT[]=" + getDate.ToString("yyyy-MM-dd") + "&dateTimeT[]=23:59&mag[]=0.0&mag[]=9.9&dep[]=0&dep[]=999&epi[]=99&pref[]=99&city[]=99&station[]=99&obsInt=1&maxInt=1&additionalC=true&Sort=S1&Comp=C0&seisCount=false&observed=false").Result);
         var json = JsonNode.Parse(response);
 
         var csv = new StringBuilder("地震の発生日,地震の発生時刻,震央地名,緯度,経度,深さ,Ｍ,最大震度\n");
